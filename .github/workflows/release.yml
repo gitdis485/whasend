@@ -18,8 +18,7 @@ jobs:
       # The workflow needs write permission on contents to create/upload releases (set above)
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       # Optional: Windows code signing certificate (PFX) as a base64-encoded artifact
-      CSC_LINK: ${{ secrets.CSC_LINK }}
-      CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+      
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -44,8 +43,7 @@ jobs:
         run: npm run dist:nsis -- --publish=always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CSC_LINK: ${{ secrets.CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          
 
       - name: List build output folders (for debugging)
         run: |

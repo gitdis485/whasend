@@ -268,28 +268,39 @@
             return;
           }
           
-          // Check min wait period gap if patient has a last message date
-          if (patient.Last_Msgsent_date && patient.Last_Msgsent_date !== 'null' && patient.Last_Msgsent_date !== '') {
-            // Skip wait period check if last template was 'welcome'
-            const lastTemplate = patient.last_template || patient.lastTemplate || '';
-            if (lastTemplate.toLowerCase() === 'welcome') {
-              console.log(`Patient ${patient.name} (${patient.phone}) eligible: Last template was 'welcome' - skipping wait period check`);
-            } else {
-              try {
-                const lastMsgDate = new Date(patient.Last_Msgsent_date);
-                if (!isNaN(lastMsgDate.getTime())) {
-                  const daysSinceLastMsg = Math.floor((today - lastMsgDate) / (1000 * 60 * 60 * 24));
-                  
-                  // Skip patients who haven't waited long enough since last message
-                  if (daysSinceLastMsg < minWaitPeriodDays) {
-                    console.log(`Patient ${patient.name} (${patient.phone}) skipped: Last message ${daysSinceLastMsg} days ago, min wait ${minWaitPeriodDays} days`);
-                    return;
-                  }
+          // Check min wait period gap. We need to handle three cases explicitly:
+          // 1) If there's no Last_Msgsent_date and last_template is empty -> enforce wait (skip)
+          // 2) If last_template is 'welcome' -> skip the wait check (eligible immediately)
+          // 3) If there is a Last_Msgsent_date -> compute days since last message and enforce min wait
+          const lastTemplate = patient.last_template || patient.lastTemplate || '';
+          const normalizedLastTemplate = String(lastTemplate).trim().toLowerCase();
+          const hasLastMsgDate = patient.Last_Msgsent_date && patient.Last_Msgsent_date !== 'null' && patient.Last_Msgsent_date !== '';
+
+          // Case 1: No last message date and no last template -> patient should wait
+          if (!hasLastMsgDate && normalizedLastTemplate === '') {
+            console.log(`Patient ${patient.name} (${patient.phone}) skipped: no last message date and no template set - waiting min period`);
+            return;
+          }
+
+          // Case 2: If last template was 'welcome', skip wait period check (always eligible)
+          if (normalizedLastTemplate === 'welcome') {
+            console.log(`Patient ${patient.name} (${patient.phone}) eligible: Last template was 'welcome' - skipping wait period check`);
+          } else if (hasLastMsgDate) {
+            // Case 3: We have a last message date -> enforce min wait
+            try {
+              const lastMsgDate = new Date(patient.Last_Msgsent_date);
+              if (!isNaN(lastMsgDate.getTime())) {
+                const daysSinceLastMsg = Math.floor((today - lastMsgDate) / (1000 * 60 * 60 * 24));
+
+                // Skip patients who haven't waited long enough since last message
+                if (daysSinceLastMsg < minWaitPeriodDays) {
+                  console.log(`Patient ${patient.name} (${patient.phone}) skipped: Last message ${daysSinceLastMsg} days ago, min wait ${minWaitPeriodDays} days`);
+                  return;
                 }
-              } catch (e) {
-                // If date parsing fails, proceed with patient (treat as no previous message)
-                console.warn(`Date parsing failed for patient ${patient.name}:`, e.message);
               }
+            } catch (e) {
+              // If date parsing fails, proceed with patient (treat as no previous message)
+              console.warn(`Date parsing failed for patient ${patient.name}:`, e.message);
             }
           }
           

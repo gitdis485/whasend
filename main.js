@@ -8739,6 +8739,57 @@ ipcMain.on('send-profile-messages-with-sequence', async (event, data) => {
         if (!phoneCheck.valid) {
           const reason = phoneCheck.reason || 'invalid';
           console.warn(`❌ FAIL REASON: Invalid phone for patient ${patient.name}: ${patient.phone} (${reason})`);
+
+          // If the phone is not a WhatsApp number, mark patient last message date as now so
+          // the system won't retry sending to them immediately. This helps avoid repeated
+          // attempts for numbers that are known not to be on WhatsApp.
+          if (reason === 'not_whatsapp') {
+            const ts = getLocalISOString();
+            try {
+              // Update patient record: set Last_Msgsent_date to now and advance last template/step
+              updateLastStmt.run(ts, templateInfo.templateName || '', templateInfo.stepNumber || 0, ts, patient.unique_id || '', patient.phone || '');
+              console.log(`Marked patient ${patient.name} (${patient.phone}) as Last_Msgsent_date=${ts} due to not_whatsapp`);
+            } catch (e) {
+              console.warn('Failed to update patient Last_Msgsent_date for not_whatsapp:', e.message);
+            }
+
+            // Log as skipped/marked so UI and exports show this decision
+            try {
+              const messageId = 'msg_' + getLocalISOString().replace(/[-:.TZ]/g, '') + '_' + Math.random().toString(36).substr(2, 6);
+              insertMessageLog.run({
+                id: messageId,
+                job_id: jobId,
+                unique_id: patient.unique_id || null,
+                name: patient.name || null,
+                phone: patient.phone || null,
+                profile: currentProfile,
+                template: templateInfo.templateName,
+                message: messageToSend ? messageToSend.substring(0, 500) : '',
+                status: 'Skipped',
+                sent_at: ts,
+                error: 'Not WhatsApp - marked as sent date'
+              });
+            } catch (logError) { console.warn('Failed to log not_whatsapp to message_logs:', logError && logError.message ? logError.message : logError); }
+
+            allLogs.push({
+              Profile: currentProfile,
+              Phone: patient.phone,
+              Status: 'Skipped',
+              Timestamp: getLocalISOString(),
+              Message: messageToSend ? messageToSend.substring(0, 500) : '',
+              Template: templateInfo.templateName,
+              CustomerName: patient.name || '',
+              Error: 'Not WhatsApp - marked as sent date'
+            });
+
+            try { event.reply('profile-message-progress', { id: jobId, profile: currentProfile, number: patient.phone, status: 'skipped', sent, failed, total: eligiblePatients.length, patient: patient.name || 'Unknown', error: 'Not WhatsApp - marked as sent date' }); } catch (e) {}
+            try { const jsonLogPath = getJsonLogsPath(); const logs = readJsonLog(jsonLogPath); const jobIndex = logs.findIndex(job => job.id === jobId); if (jobIndex !== -1) { logs[jobIndex].record_sent = sent; logs[jobIndex].record_failed = failed; writeJsonLog(jsonLogPath, logs); event.reply("reports-updated", logs); } } catch (e) { console.warn('Failed to update job progress in JSON file:', e.message); }
+
+            // Do not count this as a failure to avoid noisy failure metrics; skip to next patient
+            continue;
+          }
+
+          // Default behavior for other invalid-phone reasons: log as failure
           try {
             const messageId = 'msg_' + getLocalISOString().replace(/[-:.TZ]/g, '') + '_' + Math.random().toString(36).substr(2, 6);
             insertMessageLog.run({
@@ -8756,7 +8807,6 @@ ipcMain.on('send-profile-messages-with-sequence', async (event, data) => {
             });
           } catch (logError) { console.warn('Failed to log invalid phone to message_logs:', logError && logError.message ? logError.message : logError); }
 
-        
           allLogs.push({
             Profile: currentProfile,
             Phone: patient.phone,

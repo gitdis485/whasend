@@ -1,4 +1,4 @@
-# Message Types Support in WhatsApp Multi-Client
+MESSAGE_TYPES_SUPPORT.md# Message Types Support in WhatsApp Multi-Client
 
 ## Overview
 The `send-message-proc` function now supports comprehensive message type handling for different scenarios including text, media, and template-based messaging.

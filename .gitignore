@@ -26,6 +26,20 @@ patientExcel/
 dndExcel/
 samples/
 .wwebjs_cache/
+tools/
+
+
+# Editor
+DETECTION_ANALYSIS.md
+MAXIMUM_STEALTH_MODE.md
+MESSAGE_TYPES_SUPPORT.md
+SAFETY_FEATURES.md
+patients_export.xlsx
+scheduledResults_backup.html
+check_schedules.js
+inspect_db.js
+main_backup.js
+
 
 # Editor / IDE
 .vscode/
