@@ -1086,6 +1086,52 @@ function getDailyStats(days = 7) {
   } catch (e) { console.error('getDailyStats failed', e.message); return []; }
 }
 
+// Collect all daily_stats rows and send them to Digitalsolutions API for the logged-in user
+async function sendDailyStatsToDigitalsolutions(userInfo) {
+  try {
+    if (!db) {
+      console.warn('sendDailyStatsToDigitalsolutions: DB not initialized');
+      return { success: false, error: 'DB not initialized' };
+    }
+
+    // Read all rows from daily_stats
+    const rows = db.prepare('SELECT day, total, per_profile FROM daily_stats ORDER BY day DESC').all();
+    const stats = (rows || []).map(r => ({ day: r.day, total: r.total || 0, per_profile: (() => { try { return JSON.parse(r.per_profile || '{}'); } catch (e) { return {}; } })() }));
+
+    // Allow endpoint override via settings; keep a sensible default
+    const settings = loadSettings();
+    const url = (settings && settings.digitalsolutionsApiUrl) ? settings.digitalsolutionsApiUrl : 'https://ticket.digitalsolutions.co.in/SyncDailyStats';
+
+    const payload = {
+      user: {
+        email: userInfo && userInfo.email ? userInfo.email : null,
+        name: userInfo && userInfo.name ? userInfo.name : null,
+        id: userInfo && (userInfo.id || userInfo.mudId) ? (userInfo.id || userInfo.mudId) : null
+      },
+      stats
+    };
+    //console.log('sendDailyStatsToDigitalsolutions: preparing to send payload to', payload); 
+    // If no internet connection, skip attempt (non-blocking)
+    try {
+      const conn = await checkInternetConnectivity();
+      if (!conn || !conn.connected) {
+        console.warn('sendDailyStatsToDigitalsolutions: no internet connection, will skip sync');
+        return { success: false, error: 'No internet' };
+      }
+    } catch (e) {
+      // continue and attempt axios post
+    }
+
+    // POST to remote API (timeout 10s)
+    const res = await axios.post(url, payload, { timeout: 10000 });
+    console.log('sendDailyStatsToDigitalsolutions: sync result', res && res.status ? res.status : 'no-status');
+    return { success: true, response: res && res.data ? res.data : null };
+  } catch (e) {
+    console.warn('sendDailyStatsToDigitalsolutions failed:', e && e.message ? e.message : e);
+    return { success: false, error: e && e.message ? e.message : String(e) };
+  }
+}
+
 function loadSettings() {
   try {
     const rows = db.prepare('SELECT key, value FROM app_settings').all();
@@ -8148,7 +8194,26 @@ ipcMain.on("login-request", async (event, credentials) => {
       //console.log("Message from API:", msg);
 
       if (msg === "Profile is Active") {
-        createMainWindow();
+          createMainWindow();
+
+          // After successful login, attempt to sync daily_stats to Digitalsolutions
+          (async () => {
+            try {
+              const userInfo = {
+                email: (result && result.UserDetails && (result.UserDetails.Email || result.UserDetails.email)) || credentials.username,
+                name: (result && result.UserDetails && (result.UserDetails.Name || result.UserDetails.name)) || null,
+                id: (result && result.UserDetails && (result.UserDetails.ID || result.UserDetails.id)) || null
+              };
+              const syncRes = await sendDailyStatsToDigitalsolutions(userInfo);
+              if (!syncRes || !syncRes.success) {
+                console.warn('Daily stats sync did not succeed after login', syncRes && syncRes.error ? syncRes.error : syncRes);
+              } else {
+                console.log('Daily stats synced successfully after login');
+              }
+            } catch (e) {
+              console.warn('Daily stats sync failed after login:', e && e.message ? e.message : e);
+            }
+          })();
         // After login success and main window created, trigger an update check
         try {
           if (autoUpdater && app.isPackaged) {
@@ -8328,6 +8393,9 @@ app.whenReady().then(() => {
 // Auto-updater setup (GitHub releases via electron-updater)
 if (autoUpdater) {
   try {
+    // Track download state to prevent premature install
+    let isUpdateDownloaded = false;
+    let latestUpdateInfo = null;
     autoUpdater.logger = log;
     log.transports.file.level = 'info';
     autoUpdater.autoDownload = true; // let updates download automatically when found
@@ -8339,6 +8407,9 @@ if (autoUpdater) {
 
     autoUpdater.on('update-available', (info) => {
       console.log('AutoUpdater: update available', info);
+      // reset flag when a new update is found
+      isUpdateDownloaded = false;
+      latestUpdateInfo = info || null;
       try { if (mainWin) mainWin.webContents.send('update-available', info); } catch (e) {}
     });
 
@@ -8354,12 +8425,19 @@ if (autoUpdater) {
 
     autoUpdater.on('download-progress', (progressObj) => {
       // progressObj: { bytesPerSecond, percent, total, transferred }
-      try { if (mainWin) mainWin.webContents.send('update-progress', progressObj); } catch (e) {}
+      try {
+        if (mainWin) mainWin.webContents.send('update-progress', progressObj);
+        // also log a concise progress line
+        console.log(`AutoUpdater: download-progress percent=${progressObj.percent} transferred=${progressObj.transferred}/${progressObj.total}`);
+      } catch (e) {}
     });
 
     autoUpdater.on('update-downloaded', (info) => {
       console.log('AutoUpdater: update downloaded', info);
+      isUpdateDownloaded = true;
+      latestUpdateInfo = info || latestUpdateInfo;
       try { if (mainWin) mainWin.webContents.send('update-downloaded', info); } catch (e) {}
+      try { log && log.info && log.info('AutoUpdater: update-downloaded event received', { info }); } catch (e) {}
     });
 
     // Expose IPC handlers for renderer to trigger checks or install
@@ -8375,6 +8453,14 @@ if (autoUpdater) {
 
     ipcMain.handle('install-update', () => {
       try {
+        // Prevent install until update is fully downloaded
+        if (!isUpdateDownloaded) {
+          const msg = 'Update not downloaded yet. Install disabled until download completes.';
+          console.warn('install-update blocked:', msg);
+          try { if (mainWin) mainWin.webContents.send('install-blocked', { message: msg, info: latestUpdateInfo }); } catch (e) {}
+          return { success: false, error: msg };
+        }
+
         // This will restart the app and install the update
         autoUpdater.quitAndInstall();
         return { success: true };
