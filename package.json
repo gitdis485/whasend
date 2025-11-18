@@ -1,7 +1,7 @@
 {
   "name": "whasend",
-  "version": "1.8.6",
-  "releaseDate": "2025-11-15",
+  "version": "1.8.7",
+  "releaseDate": "2025-11-19",
   "description": "whasend device desktop app with updated features like export patient, better message send today",
   "main": "main.js",
   "scripts": {
@@ -73,7 +73,7 @@
       {
         "provider": "github",
         "owner": "gitdis485",
-        "repo": "Whasend"
+        "repo": "whasend"
       }
     ],
     "nsis": {

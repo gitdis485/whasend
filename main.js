@@ -340,7 +340,6 @@ async function sendMessageSafely(client, jid, content, options = {}) {
 
       // Step 5: Simulate reading confirmation delay (reduced)
       await new Promise(resolve => setTimeout(resolve, getHumanLikeDelay(100, 0.2)));
-
       return result;
     } catch (sendError) {
       const msg = String(sendError && sendError.message || '').toLowerCase();
@@ -353,7 +352,6 @@ async function sendMessageSafely(client, jid, content, options = {}) {
           msg.includes('recipient not found')) {
         throw new Error(`Number not registered on WhatsApp`);
       }
-
       // Special-case: whatsapp-web may throw an internal 'findChat: new chat not found' error
       // which can be transient (race when creating a new chat). Retry once after a short pause.
       if (msg.includes('findchat') || msg.includes('new chat not found')) {
@@ -373,11 +371,9 @@ async function sendMessageSafely(client, jid, content, options = {}) {
           }
         }
       }
-
       // Re-throw other send errors with original message
       throw sendError;
     }
-    
   } catch (error) {
     // Re-throw with context
     throw new Error(`Safe send failed: ${error.message}`);
