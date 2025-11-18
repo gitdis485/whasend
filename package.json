@@ -67,7 +67,7 @@
         "nsis"
       ],
       "icon": "assets/icon.ico",
-      "artifactName": "${productName}-${version}-${arch}.${ext}"
+      "artifactName": "whasend-${version}-x64-Setup.exe"
     },
     "publish": [
       {
