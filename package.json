@@ -64,7 +64,7 @@
     "compression": "maximum",
     "win": {
       "target": [
-        "portable"
+        "nsis"
       ],
       "icon": "assets/icon.ico",
       "artifactName": "${productName}-${version}-${arch}.${ext}"
@@ -79,6 +79,7 @@
     "nsis": {
       "oneClick": false,
       "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
       "installerIcon": "assets/icon.ico",
       "uninstallerIcon": "assets/icon.ico"
     }
