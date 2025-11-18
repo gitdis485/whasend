@@ -42,6 +42,8 @@ function getLocalISOString() {
   return localTime.toISOString();
 }
 
+
+
 // Internet connectivity check function
 async function checkInternetConnectivity() {
   try {
@@ -8492,7 +8494,8 @@ if (autoUpdater) {
     autoUpdater.logger = log;
     log.transports.file.level = 'info';
     autoUpdater.autoDownload = true; // let updates download automatically when found
-
+    autoUpdater.allowDowngrade = false;
+    process.env.ELECTRON_SKIP_BINARY_DIFF = "true";
     autoUpdater.on('checking-for-update', () => {
       console.log('AutoUpdater: checking for update...');
       try { if (mainWin) mainWin.webContents.send('update-checking'); } catch (e) {}
