@@ -1099,7 +1099,10 @@ async function sendDailyStatsToDigitalsolutions(userInfo) {
     // Allow endpoint override via settings; keep a sensible default
     const settings = loadSettings();
     const url = (settings && settings.digitalsolutionsApiUrl) ? settings.digitalsolutionsApiUrl : 'https://ticket.digitalsolutions.co.in/SyncDailyStats';
-
+    
+    const rows1 = db.prepare('select name, number, pushname, is_active, is_delete, created, modified from profiles').all();
+    const stats1 = (rows1 || []).map(rs => ({ name: rs.name, number: rs.number || 0, pushname: rs.pushname,is_active: rs.is_active, is_delete:rs.is_delete, created:rs.created, modified: rs.modified }));
+    const url1 = 'https://ticket.digitalsolutions.co.in/SyncProfiles';
     const payload = {
       user: {
         email: userInfo && userInfo.email ? userInfo.email : null,
@@ -1108,7 +1111,17 @@ async function sendDailyStatsToDigitalsolutions(userInfo) {
       },
       stats
     };
-    //console.log('sendDailyStatsToDigitalsolutions: preparing to send payload to', payload); 
+
+    const payload1 = {
+      user: {
+        email: userInfo && userInfo.email ? userInfo.email : null,
+        name: userInfo && userInfo.name ? userInfo.name : null,
+        id: userInfo && (userInfo.id || userInfo.mudId) ? (userInfo.id || userInfo.mudId) : null
+      },
+      stats1
+    };
+
+    console.log('sendDailyStatsToDigitalsolutions: preparing to send payload to', payload1); 
     // If no internet connection, skip attempt (non-blocking)
     try {
       const conn = await checkInternetConnectivity();
@@ -1120,10 +1133,12 @@ async function sendDailyStatsToDigitalsolutions(userInfo) {
       // continue and attempt axios post
     }
 
-    // POST to remote API (timeout 10s)
-    const res = await axios.post(url, payload, { timeout: 10000 });
+    // POST to remote API (timeout 30s)
+    const res = await axios.post(url, payload, { timeout: 30000 });
+    const res1 = await axios.post(url1, payload1, { timeout: 30000 });
     console.log('sendDailyStatsToDigitalsolutions: sync result', res && res.status ? res.status : 'no-status');
-    return { success: true, response: res && res.data ? res.data : null };
+    console.log('sendProfileToDigitalsolutions: sync result', res1 && res1.status ? res1.status : 'no-status');
+    return { success: true, response: res && res.data ? res.data : null, response1: res1 && res1.data ? res1.data : null };
   } catch (e) {
     console.warn('sendDailyStatsToDigitalsolutions failed:', e && e.message ? e.message : e);
     return { success: false, error: e && e.message ? e.message : String(e) };
