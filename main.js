@@ -139,12 +139,12 @@ function startPeriodicConnectivityCheck() {
   }, 120000); // Check every 2 minutes
 }
 
-function stopPeriodicConnectivityCheck() {
-  if (connectivityInterval) {
-    clearInterval(connectivityInterval);
-    connectivityInterval = null;
-  }
-}
+// function stopPeriodicConnectivityCheck() {
+//   if (connectivityInterval) {
+//     clearInterval(connectivityInterval);
+//     connectivityInterval = null;
+//   }
+// }
 
 // =============================================================================
 // ANTI-DETECTION & SAFETY HELPER FUNCTIONS
@@ -158,7 +158,7 @@ function getHumanLikeDelay(baseDelay = 2000, variance = 0.3) {
   const calculatedDelay = Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay;
   
   // Ensure minimum 8 seconds (8000ms) but cap maximum at 12 seconds for speed
-  return Math.max(calculatedDelay, 2000);
+  return Math.max(calculatedDelay, 800);
 }
 
 // Adaptive rate limiting based on time patterns
@@ -176,7 +176,7 @@ function getAdaptiveDelay(profileName, messageCount) {
   
   // Extra caution during very early/late hours
   if (hour < 7 || hour > 22) {
-    baseDelay = 80000; // 10 seconds during off hours
+    baseDelay = 8000; // 10 seconds during off hours
   }
   
   // Progressive slowdown for multiple messages
@@ -296,91 +296,398 @@ async function validateProfileReadiness(profileName, client = null) {
   }
 }
 
+// Helper: detect if chat is new or old
+async function isOldChat(client, jid) {
+  try {
+    const chat = await client.getChatById(jid);
+    if (!chat) return false;
+
+    // If chat has messages, it's an old chat
+    return chat.messages && chat.messages.length > 0;
+  } catch (err) {
+    return false;
+  }
+}
+
+// Helper: random delay
+function waitRandom(minMs, maxMs) {
+  const duration = Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
+  return new Promise(res => setTimeout(res, duration));
+}
+
+// Helper: scroll behavior ONLY for old chats
+async function humanScroll(client) {
+  try {
+    const page = client.pupPage;
+    if (!page) return;
+
+    const scrollAmount = Math.floor(Math.random() * 300) + 200; // 200–500px
+    const direction = Math.random() > 0.5 ? scrollAmount : -scrollAmount;
+
+    await page.evaluate((amt) => {
+      const container = document.querySelector("#main .copyable-area");
+      if (container) container.scrollBy(0, amt);
+    }, direction);
+
+    await waitRandom(400, 1200); // short pause
+  } catch {}
+}
+
+// Human-like micro interactions
+async function humanMicroActions(client) {
+  const page = client.pupPage;
+  if (!page) return;
+
+  try {
+    // Small pointer move
+    await page.mouse.move(
+      Math.random() * 200 + 200,
+      Math.random() * 400 + 200,
+      { steps: 10 }
+    );
+
+    await waitRandom(300, 900);
+
+    // Tiny scroll just to mimic natural page friction
+    await page.mouse.wheel({ deltaY: Math.random() > 0.5 ? 20 : -20 });
+
+  } catch (err) {}
+}
+ 
+// Random idle
+async function maybeIdleRandomly() {
+  if (Math.random() < 0.3) {
+    const idle = 10000 + Math.random() * 10000; // 10–20 sec
+    await new Promise(r => setTimeout(r, idle));
+  }
+}
+
+// Typing mistakes
+async function simulateHumanTypingErrors(client, jid) {
+  if (Math.random() < 0.7) return;
+
+  try {
+    await new Promise(r => setTimeout(r, 300 + Math.random() * 400));
+    await new Promise(r => setTimeout(r, 200 + Math.random() * 300));
+  } catch {}
+}
+
+// Personal behavior
+const personaCache = {};
+
+function getPersona(profile) {
+  if (personaCache[profile]) return personaCache[profile];
+
+  const personas = ['slowReader', 'fastTyper', 'heavyScroller', 'idleProne'];
+  const chosen = personas[Math.floor(Math.random() * personas.length)];
+
+  personaCache[profile] = chosen;
+  return chosen;
+}
+
+// Personal behavior
+async function applyPersonaBehaviorDelay(profileName) {
+  const persona = getPersona(profileName);
+
+  let delay = 0;
+
+  switch (persona) {
+    case 'slowReader':
+      delay = 800 + Math.random() * 900;
+      break;
+    case 'heavyScroller':
+      delay = 500 + Math.random() * 700;
+      break;
+    case 'idleProne':
+      delay = 1200 + Math.random() * 1500;
+      break;
+    case 'fastTyper':
+    default:
+      delay = 200 + Math.random() * 300;
+  }
+
+  await new Promise(r => setTimeout(r, delay));
+}
+
+// Micro human actions
+async function performMicroHumanActions(client) {
+  try {
+    if (Math.random() < 0.5) {
+      await client.pupPage.mouse.move(
+        300 + Math.random() * 50,
+        400 + Math.random() * 50
+      );
+    }
+
+    if (Math.random() < 0.4) {
+      await new Promise(r => setTimeout(r, 200 + Math.random() * 300));
+    }
+  } catch {}
+}
+
+// Chat switching simulation
+async function randomChatSwitching(client) {
+  try {
+    if (Math.random() < 0.3) return;
+
+    // Click previous chat
+    await client.pupPage.keyboard.press('ArrowUp');
+    await new Promise(r => setTimeout(r, 1000 + Math.random() * 1200));
+
+    // Return back
+    await client.pupPage.keyboard.press('ArrowDown');
+    await new Promise(r => setTimeout(r, 800 + Math.random() * 900));
+
+  } catch (e) {
+    console.log('ChatSwitch error:', e.message);
+  }
+}
+
+
+// Warm-up behavior
+async function warmUpChatBeforeSend(client, jid) {
+  try {
+    const chat = await client.getChatById(jid);
+
+    const isNewChat = chat?.messages?._messages?.length === 0;
+
+    if (!isNewChat) {
+      // Scroll like reading
+      const scrolls = Math.floor(Math.random() * 2) + 1;
+      for (let i = 0; i < scrolls; i++) {
+        await client.pupPage.mouse.wheel({ deltaY: -200 });
+        await new Promise(r => setTimeout(r, 500 + Math.random() * 800));
+      }
+    }
+
+    // Hover around chat area
+    await client.pupPage.mouse.move(
+      200 + Math.random() * 100,
+      300 + Math.random() * 100
+    );
+
+    await new Promise(r => setTimeout(r, 700 + Math.random() * 1200));
+
+  } catch (e) {
+    console.log('WarmUpChat error:', e.message);
+  }
+}
+
+
+// ----------------------------------------------------------
+//     UPDATED sendMessageSafely() WITH HUMAN BEHAVIOR
+// ----------------------------------------------------------
+
+
 // Anti-detection message sending wrapper with WhatsApp number validation
 async function sendMessageSafely(client, jid, content, options = {}) {
   try {
     console.log(`📤 Attempting to send message to: ${jid}`);
-    
-    // Step 0: Enhanced client validation
-    if (!client) {
-      throw new Error('Client is not initialized');
-    }
-    
-    // Find profile name for this client
+
+    if (!client) throw new Error('Client is not initialized');
+
+    // --- FIND PROFILE NAME ---
     let profileName = null;
     for (const [name, activeClient] of Object.entries(activeClients)) {
-      if (activeClient === client) {
-        profileName = name;
-        break;
-      }
+      if (activeClient === client) profileName = name;
     }
-    
-    if (!profileName) {
-      throw new Error('Profile not found for this client');
-    }
-    
-    // Step 1: Validate profile readiness before sending
+    if (!profileName) throw new Error('Profile not found for this client');
+
+    // --- VALIDATE PROFILE BEFORE SEND ---
     const validation = await validateProfileReadiness(profileName, client);
     if (!validation.ready) {
       throw new Error(`Profile not ready: ${validation.error}`);
     }
-    
-    console.log(`✅ Profile ${profileName} validated and ready`);
-    
-    // Step 2: Simulate human typing for text messages (optimized)
+
+    // ============================================================
+    // ENTERPRISE ANTI-BAN PACK — PHASE 1: CHAT WARM-UP
+    // ============================================================
+    await warmUpChatBeforeSend(client, jid);
+
+    // ============================================================
+    // ENTERPRISE ANTI-BAN PACK — PHASE 2: CHAT SWITCHING
+    // ============================================================
+    await randomChatSwitching(client);
+
+    // ============================================================
+    // ENTERPRISE ANTI-BAN PACK — PHASE 3: HUMAN MICRO-ACTIONS
+    // ============================================================
+    await performMicroHumanActions(client);
+
+    // ============================================================
+    // ENTERPRISE ANTI-BAN PACK — PHASE 4: PERSONALITY BEHAVIOR
+    // ============================================================
+    await applyPersonaBehaviorDelay(profileName);
+
+    // ============================================================
+    // ENTERPRISE ANTI-BAN PACK — PHASE 5: TYPING CORRECTIONS
+    // ============================================================
+    await simulateHumanTypingErrors(client, jid);
+
+    // --- BASIC TYPING SIMULATION (Your original) ---
     if (typeof content === 'string' && content.length > 10) {
       await simulateTyping(client, jid, content);
     }
-    
-    // Step 3: Add small random delay before actual sending (reduced)
-    await new Promise(resolve => setTimeout(resolve, getHumanLikeDelay(200, 0.3)));
-    
-    // Step 4: Send the message directly (let WhatsApp handle validation during send)
+
+    // SMALL RANDOM DELAY (Your original)
+    await new Promise(resolve =>
+      setTimeout(resolve, getHumanLikeDelay(200, 0.3))
+    );
+
+    // ============================================================
+    // ENTERPRISE ANTI-BAN PACK — PHASE 6: RANDOM IDLE
+    // ============================================================
+    await maybeIdleRandomly();
+
+    // ---------------- SEND MESSAGE ----------------
     try {
       const result = await client.sendMessage(jid, content, options);
-      console.log(`✅ Message sent successfully to ${jid} via profile ${profileName}`);
 
-      // Step 5: Simulate reading confirmation delay (reduced)
-      await new Promise(resolve => setTimeout(resolve, getHumanLikeDelay(100, 0.2)));
+      // Tiny micro delay after sending
+      await new Promise(resolve =>
+        setTimeout(resolve, getHumanLikeDelay(1000, 0.2))
+      );
+
       return result;
-    } catch (sendError) {
-      const msg = String(sendError && sendError.message || '').toLowerCase();
 
-      // Check if sending fails due to invalid WhatsApp number
-      if (msg.includes('not registered') || 
-          msg.includes('invalid user') ||
-          msg.includes('user not found') ||
-          msg.includes('phone number not registered') ||
-          msg.includes('recipient not found')) {
+    } catch (sendError) {
+      const msg = (sendError?.message || '').toLowerCase();
+
+      if (
+        msg.includes('not registered') ||
+        msg.includes('invalid user') ||
+        msg.includes('user not found') ||
+        msg.includes('phone number not registered') ||
+        msg.includes('recipient not found')
+      ) {
         throw new Error(`Number not registered on WhatsApp`);
       }
-      // Special-case: whatsapp-web may throw an internal 'findChat: new chat not found' error
-      // which can be transient (race when creating a new chat). Retry once after a short pause.
+
+      // findChat retry (Your original)
       if (msg.includes('findchat') || msg.includes('new chat not found')) {
-        // Only retry once to avoid infinite loops
-        if (!options || !options.__findChatRetried) {
-          console.warn(`⚠️ findChat error detected for ${jid}. Retrying once after short delay...`);
-          await new Promise(resolve => setTimeout(resolve, 1000));
+        if (!options.__findChatRetried) {
+          console.warn(`⚠️ Retrying findChat issue...`);
+          await new Promise(r => setTimeout(r, 1000));
+
+          const retryOpts = { ...options, __findChatRetried: true };
           try {
-            const retryOpts = Object.assign({}, options || {}, { __findChatRetried: true });
             const retryResult = await client.sendMessage(jid, content, retryOpts);
-            console.log(`✅ Retry succeeded for ${jid} after findChat error`);
-            await new Promise(resolve => setTimeout(resolve, getHumanLikeDelay(100, 0.2)));
+
+            await new Promise(r =>
+              setTimeout(r, getHumanLikeDelay(100, 0.2))
+            );
+
             return retryResult;
-          } catch (retryErr) {
-            console.warn(`⚠️ Retry after findChat error failed for ${jid}:`, retryErr && retryErr.message ? retryErr.message : retryErr);
-            // fall through to rethrow original error below
-          }
+          } catch (_) {}
         }
       }
-      // Re-throw other send errors with original message
+
       throw sendError;
     }
-  } catch (error) {
-    // Re-throw with context
-    throw new Error(`Safe send failed: ${error.message}`);
+
+  } catch (err) {
+    throw new Error(`Safe send failed: ${err.message}`);
   }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// async function sendMessageSafely(client, jid, content, options = {}) {
+//   try {
+//     console.log(`📤 Attempting to send message to: ${jid}`);
+
+//     if (!client) throw new Error('Client is not initialized');
+
+//     // Match client to profile
+//     let profileName = null;
+//     for (const [name, activeClient] of Object.entries(activeClients)) {
+//       if (activeClient === client) {
+//         profileName = name;
+//         break;
+//       }
+//     }
+//     if (!profileName) throw new Error('Profile not found for this client');
+
+//     // Validate readiness
+//     const validation = await validateProfileReadiness(profileName, client);
+//     if (!validation.ready) throw new Error(`Profile not ready: ${validation.error}`);
+
+//     //  1 CHECK: Is this a new chat or old chat?
+//     const oldChat = await isOldChat(client, jid);
+
+//     // 2 HUMAN BEHAVIOR BEFORE SENDING
+//     // Give WhatsApp 10–20 seconds of natural idle
+//     await waitRandom(10000, 20000);
+
+//     // Small pointer + tiny scroll to simulate user active
+//     await humanMicroActions(client);
+
+//     // Old chats get a small scroll “look around”
+//     if (oldChat) {
+//       await humanScroll(client);
+//     }
+
+//     // 3 Human typing simulation (you already had this)
+//     if (typeof content === 'string' && content.length > 10) {
+//       await simulateTyping(client, jid, content);
+//     }
+
+//     // 4 Short delay before real send
+//     await waitRandom(300, 800);
+
+//     //  5 SEND MESSAGE
+//     let result;
+//     try {
+//       result = await client.sendMessage(jid, content, options);
+//       await waitRandom(200, 600);
+//       return result;
+//     }
+//     catch (sendError) {
+//       const msg = String(sendError.message || '').toLowerCase();
+
+//       // Invalid number handling
+//       if (
+//         msg.includes("not registered") ||
+//         msg.includes("invalid user") ||
+//         msg.includes("user not found")
+//       ) {
+//         throw new Error(`Number not registered on WhatsApp`);
+//       }
+
+//       // findChat retry logic
+//       if ((msg.includes("findchat") || msg.includes("new chat not found")) &&
+//           !options.__findChatRetried) 
+//       {
+//         console.warn(`⚠️ findChat issue, retrying...`);
+//         await waitRandom(800, 1500);
+//         const retryOpts = { ...options, __findChatRetried: true };
+//         const retryResult = await client.sendMessage(jid, content, retryOpts);
+//         await waitRandom(200, 600);
+//         return retryResult;
+//       }
+
+//       throw sendError;
+//     }
+
+//   } catch (error) {
+//     throw new Error(`Safe send failed: ${error.message}`);
+//   }
+// }
+
 
 // Bulk WhatsApp number validation function
 async function validateWhatsAppNumbers(client, phoneNumbers, maxConcurrent = 5) {
@@ -457,200 +764,173 @@ function setCooldown(profileName, minutes = 10) {
   console.log(`[${profileName}] Cooldown activated for ${minutes} minutes`);
 }
 
-// Safety status reporting
-function logSafetyStatus() {
-  console.log('\n🛡️ SAFETY STATUS REPORT');
-  console.log('========================');
-  
-  for (const [profileName, health] of sessionHealth) {
-    const cooldownEnd = profileCooldowns.get(profileName);
-    const inCooldown = cooldownEnd && Date.now() < cooldownEnd;
-    
-    let status = '🟢 SAFE';
-    if (health.consecutiveFailures >= 5 || health.rateLimitHits >= 3 || inCooldown) {
-      status = '🔴 RISK';
-    } else if (health.consecutiveFailures >= 3 || health.rateLimitHits >= 1) {
-      status = '🟡 CAUTION';
-    }
-    
-    console.log(`[${profileName}] ${status}`);
-    console.log(`  Messages: ${health.messagesSent}, Failures: ${health.consecutiveFailures}, Rate hits: ${health.rateLimitHits}`);
-    
-    if (inCooldown) {
-      const remaining = Math.ceil((cooldownEnd - Date.now()) / 60000);
-      console.log(`  ⏳ Cooldown: ${remaining} minutes remaining`);
-    }
-  }
-  console.log('========================\n');
-}
-
 // Advanced stealth detection and countermeasures
-function addStealthCountermeasures(page) {
-  return page.evaluateOnNewDocument(() => {
-    // CRITICAL: Block all automation detection methods
-    const originalDefineProperty = Object.defineProperty;
-    Object.defineProperty = function(obj, prop, descriptor) {
-      if (prop === 'webdriver' && descriptor && descriptor.get) {
-        // Block attempts to redefine webdriver
-        return obj;
-      }
-      return originalDefineProperty.apply(this, arguments);
-    };
+// function addStealthCountermeasures(page) {
+//   return page.evaluateOnNewDocument(() => {
+//     // CRITICAL: Block all automation detection methods
+//     const originalDefineProperty = Object.defineProperty;
+//     Object.defineProperty = function(obj, prop, descriptor) {
+//       if (prop === 'webdriver' && descriptor && descriptor.get) {
+//         // Block attempts to redefine webdriver
+//         return obj;
+//       }
+//       return originalDefineProperty.apply(this, arguments);
+//     };
     
-    // Block common automation detection scripts
-    const blockedScripts = [
-      'webdriver-manager',
-      'selenium',
-      'phantomjs',
-      'automation',
-      'bot-detection'
-    ];
+//     // Block common automation detection scripts
+//     const blockedScripts = [
+//       'webdriver-manager',
+//       'selenium',
+//       'phantomjs',
+//       'automation',
+//       'bot-detection'
+//     ];
     
-    const originalAppendChild = Element.prototype.appendChild;
-    Element.prototype.appendChild = function(child) {
-      if (child.tagName === 'SCRIPT' && child.src) {
-        for (const blocked of blockedScripts) {
-          if (child.src.includes(blocked)) {
-            console.log('[STEALTH] Blocked automation detection script:', child.src);
-            return child;
-          }
-        }
-      }
-      return originalAppendChild.call(this, child);
-    };
+//     const originalAppendChild = Element.prototype.appendChild;
+//     Element.prototype.appendChild = function(child) {
+//       if (child.tagName === 'SCRIPT' && child.src) {
+//         for (const blocked of blockedScripts) {
+//           if (child.src.includes(blocked)) {
+//             console.log('[STEALTH] Blocked automation detection script:', child.src);
+//             return child;
+//           }
+//         }
+//       }
+//       return originalAppendChild.call(this, child);
+//     };
     
-    // Override console methods to hide automation logs
-    const originalLog = console.log;
-    console.log = function() {
-      const message = Array.from(arguments).join(' ');
-      if (message.includes('webdriver') || message.includes('automation') || message.includes('bot')) {
-        return; // Suppress automation-related logs
-      }
-      return originalLog.apply(this, arguments);
-    };
+//     // Override console methods to hide automation logs
+//     const originalLog = console.log;
+//     console.log = function() {
+//       const message = Array.from(arguments).join(' ');
+//       if (message.includes('webdriver') || message.includes('automation') || message.includes('bot')) {
+//         return; // Suppress automation-related logs
+//       }
+//       return originalLog.apply(this, arguments);
+//     };
     
-    // Spoof browser performance characteristics
-    Object.defineProperty(performance, 'now', {
-      value: function() {
-        // Add slight randomness to performance timing to avoid fingerprinting
-        return Date.now() + Math.random() * 0.1;
-      },
-      configurable: false
-    });
+//     // Spoof browser performance characteristics
+//     Object.defineProperty(performance, 'now', {
+//       value: function() {
+//         // Add slight randomness to performance timing to avoid fingerprinting
+//         return Date.now() + Math.random() * 0.1;
+//       },
+//       configurable: false
+//     });
     
-    // Override automation-specific APIs
-    if (window.chrome && window.chrome.runtime) {
-      delete window.chrome.runtime.onConnect;
-      delete window.chrome.runtime.onMessage;
-      delete window.chrome.runtime.connect;
-      delete window.chrome.runtime.sendMessage;
-    }
-  });
-}
+//     // Override automation-specific APIs
+//     if (window.chrome && window.chrome.runtime) {
+//       delete window.chrome.runtime.onConnect;
+//       delete window.chrome.runtime.onMessage;
+//       delete window.chrome.runtime.connect;
+//       delete window.chrome.runtime.sendMessage;
+//     }
+//   });
+// }
 
-// Network traffic pattern normalization
-function setupNetworkMasking(page) {
-  return page.setRequestInterception(true).then(() => {
-    page.on('request', (request) => {
-      const headers = request.headers();
+// // Network traffic pattern normalization
+// function setupNetworkMasking(page) {
+//   return page.setRequestInterception(true).then(() => {
+//     page.on('request', (request) => {
+//       const headers = request.headers();
       
-      // Remove automation-specific headers
-      delete headers['accept-language'];
-      delete headers['sec-fetch-site'];
-      delete headers['sec-fetch-mode'];
-      delete headers['sec-fetch-dest'];
+//       // Remove automation-specific headers
+//       delete headers['accept-language'];
+//       delete headers['sec-fetch-site'];
+//       delete headers['sec-fetch-mode'];
+//       delete headers['sec-fetch-dest'];
       
-      // Add realistic browser headers
-      const newHeaders = {
-        ...headers,
-        'accept-language': 'en-US,en;q=0.9,es;q=0.8',
-        'sec-ch-ua': '"Google Chrome";v="120", "Chromium";v="120", "Not:A-Brand";v="99"',
-        'sec-ch-ua-mobile': '?0',
-        'sec-ch-ua-platform': '"Windows"',
-        'sec-fetch-dest': 'document',
-        'sec-fetch-mode': 'navigate',
-        'sec-fetch-site': 'none',
-        'upgrade-insecure-requests': '1'
-      };
+//       // Add realistic browser headers
+//       const newHeaders = {
+//         ...headers,
+//         'accept-language': 'en-US,en;q=0.9,es;q=0.8',
+//         'sec-ch-ua': '"Google Chrome";v="120", "Chromium";v="120", "Not:A-Brand";v="99"',
+//         'sec-ch-ua-mobile': '?0',
+//         'sec-ch-ua-platform': '"Windows"',
+//         'sec-fetch-dest': 'document',
+//         'sec-fetch-mode': 'navigate',
+//         'sec-fetch-site': 'none',
+//         'upgrade-insecure-requests': '1'
+//       };
       
-      // Continue with modified headers
-      request.continue({ headers: newHeaders });
-    });
-  });
-}
+//       // Continue with modified headers
+//       request.continue({ headers: newHeaders });
+//     });
+//   });
+// }
 
-// Browser extension simulation to appear like normal user browser
-function simulateBrowserExtensions(page) {
-  return page.evaluateOnNewDocument(() => {
-    // Simulate common browser extensions
-    window.chrome = window.chrome || {};
-    window.chrome.runtime = window.chrome.runtime || {};
+// // Browser extension simulation to appear like normal user browser
+// function simulateBrowserExtensions(page) {
+//   return page.evaluateOnNewDocument(() => {
+//     // Simulate common browser extensions
+//     window.chrome = window.chrome || {};
+//     window.chrome.runtime = window.chrome.runtime || {};
     
-    // Simulate AdBlock extension
-    window.chrome.runtime.getManifest = () => ({
-      name: "AdBlock",
-      version: "4.44.0",
-      manifest_version: 3
-    });
+//     // Simulate AdBlock extension
+//     window.chrome.runtime.getManifest = () => ({
+//       name: "AdBlock",
+//       version: "4.44.0",
+//       manifest_version: 3
+//     });
     
-    // Simulate extension message passing (but don't actually function)
-    window.chrome.runtime.sendMessage = function(extensionId, message, options, responseCallback) {
-      if (responseCallback) {
-        setTimeout(() => responseCallback({}), Math.random() * 100);
-      }
-    };
+//     // Simulate extension message passing (but don't actually function)
+//     window.chrome.runtime.sendMessage = function(extensionId, message, options, responseCallback) {
+//       if (responseCallback) {
+//         setTimeout(() => responseCallback({}), Math.random() * 100);
+//       }
+//     };
     
-    // Simulate extension storage
-    window.chrome.storage = {
-      local: {
-        get: function(keys, callback) {
-          setTimeout(() => callback({}), Math.random() * 50);
-        },
-        set: function(items, callback) {
-          if (callback) setTimeout(callback, Math.random() * 50);
-        }
-      }
-    };
+//     // Simulate extension storage
+//     window.chrome.storage = {
+//       local: {
+//         get: function(keys, callback) {
+//           setTimeout(() => callback({}), Math.random() * 50);
+//         },
+//         set: function(items, callback) {
+//           if (callback) setTimeout(callback, Math.random() * 50);
+//         }
+//       }
+//     };
     
-    // Add realistic extension IDs to chrome object
-    Object.defineProperty(window.chrome, 'extensions', {
-      value: {
-        getAll: function(callback) {
-          callback([
-            { id: 'gighmmpiobklfepjocnamgkkbiglidom', name: 'AdBlock' },
-            { id: 'cjpalhdlnbpafiamejdnhcphjbkeiagm', name: 'uBlock Origin' }
-          ]);
-        }
-      },
-      configurable: false
-    });
+//     // Add realistic extension IDs to chrome object
+//     Object.defineProperty(window.chrome, 'extensions', {
+//       value: {
+//         getAll: function(callback) {
+//           callback([
+//             { id: 'gighmmpiobklfepjocnamgkkbiglidom', name: 'AdBlock' },
+//             { id: 'cjpalhdlnbpafiamejdnhcphjbkeiagm', name: 'uBlock Origin' }
+//           ]);
+//         }
+//       },
+//       configurable: false
+//     });
     
-    // Simulate realistic browser vendor information
-    Object.defineProperty(navigator, 'vendor', {
-      get: () => 'Google Inc.',
-      configurable: false
-    });
+//     // Simulate realistic browser vendor information
+//     Object.defineProperty(navigator, 'vendor', {
+//       get: () => 'Google Inc.',
+//       configurable: false
+//     });
     
-    Object.defineProperty(navigator, 'vendorSub', {
-      get: () => '',
-      configurable: false
-    });
+//     Object.defineProperty(navigator, 'vendorSub', {
+//       get: () => '',
+//       configurable: false
+//     });
     
-    // Simulate hardware concurrency realistically
-    Object.defineProperty(navigator, 'hardwareConcurrency', {
-      get: () => 8,
-      configurable: false
-    });
+//     // Simulate hardware concurrency realistically
+//     Object.defineProperty(navigator, 'hardwareConcurrency', {
+//       get: () => 8,
+//       configurable: false
+//     });
     
-    // Simulate platform information
-    Object.defineProperty(navigator, 'platform', {
-      get: () => 'Win32',
-      configurable: false
-    });
+//     // Simulate platform information
+//     Object.defineProperty(navigator, 'platform', {
+//       get: () => 'Win32',
+//       configurable: false
+//     });
     
-    console.log('[STEALTH] Browser extension simulation activated');
-  });
-}
+//     console.log('[STEALTH] Browser extension simulation activated');
+//   });
+// }
 
 // Controllers for jobs
 const jobControllers = {}; // { jobId: { paused: false, cancelled: false } }
@@ -1345,7 +1625,6 @@ ipcMain.on("open-template-window", () => {
     templateWin = null;
   });
 });
-
 
 // ✅ Create new Template page
 ipcMain.on("open-Reports-window", () => {
@@ -4413,6 +4692,9 @@ ipcMain.on("send-message-proc", async (event, data) => {
   
 
 });
+// -----------------------------------
+//  Not in Use
+// -----------------------------------
 // Send a schedule immediately from scheduledResults UI
 ipcMain.on('send-schedule-now', (event, schedule) => {
   try {
@@ -4711,6 +4993,9 @@ ipcMain.on('send-schedule-now', (event, schedule) => {
   }
 });
 
+// -----------------------------------
+//  Not in Use
+// -----------------------------------
 // Send a schedule using patient-assigned profiles when available
 // Falls back to the original round-robin behavior when no assigned profile or profile not logged in.
 ipcMain.on('send-schedule-now-assigned', (event, schedule) => {
@@ -5307,6 +5592,7 @@ ipcMain.on('send-schedule-now-assigned', (event, schedule) => {
     try { event.reply('schedule-send-response', { success: false, message: e && e.message ? e.message : String(e) }); } catch (err) {}
   }
 });
+
 const reportFile = getJsonLogsPath();
 
 // IPC to return report logs to renderer
@@ -5864,7 +6150,6 @@ ipcMain.handle('clear-all-logs', () => {
         const folderPath = path.join(userDataPath, folderName);
         
         if (fs.existsSync(folderPath)) {
-          console.log(`🔄 Cleaning folder: ${folderPath}`);
           
           // Get all files in the folder
           const files = fs.readdirSync(folderPath);
@@ -6002,11 +6287,11 @@ function updateReportFile(jobId, updates) {
 
 // Pause
 ipcMain.on("pause-job", (event, jobId) => {
-  console.log("📌 Pause request received for job:", jobId);
+  //console.log("📌 Pause request received for job:", jobId);
   if (jobControllers[jobId]) {
     jobControllers[jobId].paused = true;
     updateReportFile(jobId, { paused: true, status: "paused" });
-    console.log("✅ Job paused and JSON updated:", jobId);
+    //console.log("✅ Job paused and JSON updated:", jobId);
     event.reply("job-paused", jobId);
     
     // Send updated reports to refresh UI
@@ -6016,7 +6301,7 @@ ipcMain.on("pause-job", (event, jobId) => {
       console.warn("Failed to send reports update after pause:", e.message);
     }
   } else {
-    console.log("❌ Job not found in controllers:", jobId);
+    //console.log("❌ Job not found in controllers:", jobId);
     // Job might be completed, just update the status in reports for UI consistency
     updateReportFile(jobId, { paused: true, status: "paused" });
     event.reply("job-paused", jobId);
@@ -6030,11 +6315,11 @@ ipcMain.on("pause-job", (event, jobId) => {
 
 // Resume
 ipcMain.on("resume-job", (event, jobId) => {
-  console.log("📌 Resume request received for job:", jobId);
+  //console.log("📌 Resume request received for job:", jobId);
   if (jobControllers[jobId]) {
     jobControllers[jobId].paused = false;
     updateReportFile(jobId, { paused: false, status: "in_progress" });
-    console.log("✅ Job resumed and JSON updated:", jobId);
+    //console.log("✅ Job resumed and JSON updated:", jobId);
     event.reply("job-resumed", jobId);
     
     // Send updated reports to refresh UI
@@ -6044,7 +6329,7 @@ ipcMain.on("resume-job", (event, jobId) => {
       console.warn("Failed to send reports update after resume:", e.message);
     }
   } else {
-    console.log("❌ Job not found in controllers:", jobId);
+    //console.log("❌ Job not found in controllers:", jobId);
     // Job might be completed or not running, inform UI
     event.reply("job-resume-failed", { jobId, reason: "Job not active or completed" });
     try {
@@ -6057,13 +6342,12 @@ ipcMain.on("resume-job", (event, jobId) => {
 
 // Cancel
 ipcMain.on("cancel-job", (event, jobId) => {
-  console.log("📌 Cancel request received for job:", jobId);
+  //console.log("📌 Cancel request received for job:", jobId);
   if (jobControllers[jobId]) {
     jobControllers[jobId].cancelled = true;
     updateReportFile(jobId, { cancelled: true, status: "cancelled" });
-    console.log("✅ Job cancelled and JSON updated:", jobId);
+    //console.log("✅ Job cancelled and JSON updated:", jobId);
     event.reply("job-cancelled", jobId);
-    
     // Send updated reports to refresh UI
     try {
       event.reply("reports-updated", readJsonLog());
@@ -6071,7 +6355,7 @@ ipcMain.on("cancel-job", (event, jobId) => {
       console.warn("Failed to send reports update after cancel:", e.message);
     }
   } else {
-    console.log("❌ Job not found in controllers:", jobId);
+    //console.log("❌ Job not found in controllers:", jobId);
     // Job might be completed, just update the status in reports for UI consistency
     updateReportFile(jobId, { cancelled: true, status: "cancelled" });
     event.reply("job-cancelled", jobId);
@@ -6287,7 +6571,6 @@ try {
   }
 }
 
-
 // Helper: get configured daily limit for a profile. Gets limit from app_settings.defaultMessageLimitPerProfile only
 function getProfileDailyLimit(profileName) {
   try {
@@ -6326,46 +6609,46 @@ function getProfileDailySent(profileName) {
 }
 
 // When a profile reaches its daily limit, mark this send as skipped and optionally pause the job
-function handleProfileLimitReached(profileName, jobId, item, allLogs, jsonLogPath) {
-  try {
-    const msg = `Daily limit reached for profile ${profileName}`;
-    console.warn(msg);
-    // Record skip in memory log and DB
-    allLogs.push({ Profile: profileName, Phone: item && (item.number || item.phone) || '', Status: 'Skipped', Timestamp: getLocalISOString(), Message: '', Error: msg });
-    try {
-      const mid = 'ml_' + Date.now().toString() + '_' + Math.floor(Math.random() * 1000);
-      insertMessageLog.run({
-        id: mid,
-        job_id: jobId || null,
-        unique_id: item && (item.row && (item.row.unique_id || item.row.uniqueId) || item.unique_id) || null,
-        name: item && (item.row && (item.row.name || item.row.Name) || item.name) || null,
-        phone: item && (item.number || item.phone) || null,
-        profile: profileName,
-        template: (item && item.template) || null,
-        message: '',
-        status: 'Skipped',
-        sent_at: getLocalISOString(),
-        error: msg
-      });
-    } catch (e) { console.warn('insertMessageLog failed when recording profile-limit skip:', e && e.message ? e.message : e); }
+// function handleProfileLimitReached(profileName, jobId, item, allLogs, jsonLogPath) {
+//   try {
+//     const msg = `Daily limit reached for profile ${profileName}`;
+//     console.warn(msg);
+//     // Record skip in memory log and DB
+//     allLogs.push({ Profile: profileName, Phone: item && (item.number || item.phone) || '', Status: 'Skipped', Timestamp: getLocalISOString(), Message: '', Error: msg });
+//     try {
+//       const mid = 'ml_' + Date.now().toString() + '_' + Math.floor(Math.random() * 1000);
+//       insertMessageLog.run({
+//         id: mid,
+//         job_id: jobId || null,
+//         unique_id: item && (item.row && (item.row.unique_id || item.row.uniqueId) || item.unique_id) || null,
+//         name: item && (item.row && (item.row.name || item.row.Name) || item.name) || null,
+//         phone: item && (item.number || item.phone) || null,
+//         profile: profileName,
+//         template: (item && item.template) || null,
+//         message: '',
+//         status: 'Skipped',
+//         sent_at: getLocalISOString(),
+//         error: msg
+//       });
+//     } catch (e) { console.warn('insertMessageLog failed when recording profile-limit skip:', e && e.message ? e.message : e); }
 
-    // Update JSON job log if present
-    try { if (jsonLogPath && jobId) updateJobInLog(jsonLogPath, jobId, { record_failed: null }); } catch (e) {}
+//     // Update JSON job log if present
+//     try { if (jsonLogPath && jobId) updateJobInLog(jsonLogPath, jobId, { record_failed: null }); } catch (e) {}
 
-    // Default behavior: skip this profile's sends only. If you want to stop the entire job, set this flag in settings.
-    try {
-      const s = loadSettings();
-      if (s && s.stopJobWhenProfileLimitReached) {
-        if (jobId && jobControllers[jobId]) {
-          jobControllers[jobId].paused = true;
-          console.log(`Job ${jobId} paused because profile ${profileName} hit its daily limit`);
-          try { if (jsonLogPath) updateJobInLog(jsonLogPath, jobId, { status: 'paused', paused: true }); } catch (e) {}
-        }
-      }
-    } catch (e) {}
+//     // Default behavior: skip this profile's sends only. If you want to stop the entire job, set this flag in settings.
+//     try {
+//       const s = loadSettings();
+//       if (s && s.stopJobWhenProfileLimitReached) {
+//         if (jobId && jobControllers[jobId]) {
+//           jobControllers[jobId].paused = true;
+//           console.log(`Job ${jobId} paused because profile ${profileName} hit its daily limit`);
+//           try { if (jsonLogPath) updateJobInLog(jsonLogPath, jobId, { status: 'paused', paused: true }); } catch (e) {}
+//         }
+//       }
+//     } catch (e) {}
 
-  } catch (e) { console.error('handleProfileLimitReached error:', e && e.message ? e.message : e); }
-}
+//   } catch (e) { console.error('handleProfileLimitReached error:', e && e.message ? e.message : e); }
+// }
 
 // Create templates table to persist templates.json data
 db.prepare(`
@@ -6624,20 +6907,20 @@ const upsertPatient = db.prepare(`
 `);
 
 // ✅ Insert or update single patient
-function savePatient(patient) {
-  if (!patient.unique_id) {
-    // Generate unique_id if not provided
-    patient.unique_id = `PAT-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-  }
-  if (!patient.add_date) patient.add_date = getLocalISOString();
-  patient.mod_date = getLocalISOString();
+// function savePatient(patient) {
+//   if (!patient.unique_id) {
+//     // Generate unique_id if not provided
+//     patient.unique_id = `PAT-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+//   }
+//   if (!patient.add_date) patient.add_date = getLocalISOString();
+//   patient.mod_date = getLocalISOString();
   
-  // Set default values for new columns
-  if (patient.IsNew === undefined) patient.IsNew = 1; // New patient by default
-  patient.Filedate = getLocalISOString(); // Always update Filedate to current timestamp
+//   // Set default values for new columns
+//   if (patient.IsNew === undefined) patient.IsNew = 1; // New patient by default
+//   patient.Filedate = getLocalISOString(); // Always update Filedate to current timestamp
 
-  return upsertPatient.run(patient);
-}
+//   return upsertPatient.run(patient);
+// }
 
 // Fetch patients
 ipcMain.handle("get-patients", () => {
@@ -7439,7 +7722,6 @@ function startWhatsAppClient(profileName, event = null) {
     console.log(`♻️ Reusing existing client for ${profileName}`);
     return activeClients[profileName];
   }
-
   // Ensure LocalAuth uses a writable path (userData) when the app is packaged.
   const authBasePath = path.join(app.getPath('userData'), '.wwebjs_auth');
   try { fs.mkdirSync(authBasePath, { recursive: true }); } catch (e) {}
@@ -7459,59 +7741,25 @@ function startWhatsAppClient(profileName, event = null) {
   }
 
   const chromePath = process.platform === 'win32' ? findChromeOnWindows() : null;
-  //console.log(`Using LocalAuth base: ${authBasePath}`);
-  //console.log(`Detected chrome executable: ${chromePath || 'none'}`);
-
+  
   // ADVANCED anti-detection browser configuration
   const antiDetectionArgs = [
     "--no-sandbox",
     "--disable-setuid-sandbox",
-    
-    // CRITICAL: Remove automation detection banners and indicators
-    "--disable-blink-features=AutomationControlled",
-    "--exclude-switches=enable-automation",
-    "--disable-extensions-except",
-    "--disable-plugins-discovery",
-    "--disable-plugins",
-    
-    // Hide automation APIs and interfaces  
-    "--disable-features=VizDisplayCompositor,TranslateUI,BlinkGenPropertyTrees",
+    "--disable-infobars", // removes 'Chrome is being controlled by automated software'
+    "--window-position=-10000,-10000", // hides window off-screen
+    "--mute-audio",
+    "--start-maximized",
     "--disable-dev-shm-usage",
-    "--disable-web-security",
-    "--disable-features=VizDisplayCompositor",
-    "--disable-ipc-flooding-protection",
-    
-    // Remove automation signatures
-    "--no-first-run",
-    "--no-default-browser-check", 
-    "--disable-default-apps",
+    "--ignore-certificate-errors",
+    "--ignore-certificate-errors-spki-list",
+    "--disable-notifications",
+    "--disable-gpu", // optional but makes fingerprint stable for automation
     "--disable-popup-blocking",
-    "--disable-prompt-on-repost",
-    "--disable-hang-monitor",
-    "--disable-sync",
-    
-    // Performance & memory masking
+    "--disable-default-apps",
     "--disable-background-timer-throttling",
-    "--disable-backgrounding-occluded-windows", 
-    "--disable-renderer-backgrounding",
-    "--disable-background-networking",
-    "--memory-pressure-off",
-    "--max_old_space_size=4096",
-    
-    // Network & fingerprint masking
-    "--disable-logging",
-    "--disable-gpu-logging",
-    "--silent-debugger-extension-api",
-    "--disable-extensions-file-access-check",
-    "--disable-extensions-http-throttling",
-    
-    // Randomized window size to avoid fingerprinting
-    `--window-size=${1200 + Math.floor(Math.random() * 400)},${800 + Math.floor(Math.random() * 300)}`,
-    
-    // User data simulation
-    "--enable-features=NetworkService,NetworkServiceLogging",
-    "--use-fake-ui-for-media-stream",
-    "--use-fake-device-for-media-stream"
+    "--disable-backgrounding-occluded-windows",
+    `--window-size=${1200 + Math.floor(Math.random() * 200)},${800 + Math.floor(Math.random() * 200)}`
   ];
 
   // Randomized user agents for different profiles
@@ -7530,20 +7778,15 @@ function startWhatsAppClient(profileName, event = null) {
   // Create puppeteer config without userDataDir when using LocalAuth
   // LocalAuth manages its own user data directory internally
   const puppeteerConfig = {
-    headless: true, 
+    headless: false, 
     executablePath: chromePath || undefined, 
     args: antiDetectionArgs,
-    
     // ADVANCED stealth configuration
     defaultViewport: null,
-    // NOTE: userDataDir removed - LocalAuth manages this internally
-    // This fixes: "LocalAuth is not compatible with a user-supplied userDataDir"
+    // Stealth: remove only 2 detectable switches (not more!)
     ignoreDefaultArgs: [
-      '--enable-automation',
-      '--enable-blink-features=AutomationControlled',
-      '--disable-background-timer-throttling',
-      '--disable-backgrounding-occluded-windows',
-      '--disable-renderer-backgrounding'
+        "--enable-automation",
+        "--enable-blink-features=AutomationControlled"
     ],
     
     // Additional stealth options
@@ -7551,20 +7794,17 @@ function startWhatsAppClient(profileName, event = null) {
     devtools: false,
     
     // Handle permissions to avoid prompts
-    args: antiDetectionArgs.concat([
-      '--disable-notifications',
-      '--disable-geolocation', 
-      '--disable-microphone',
-      '--disable-camera'
-    ])
+    // args: antiDetectionArgs.concat([
+    //   '--disable-geolocation', 
+    //   '--disable-microphone',
+    //   '--disable-camera'
+    // ])
   };
 
   // For EXE compatibility, ensure we have proper temp directory fallback
   if (process.pkg && !chromePath) {
     // When packaged as EXE and no Chrome found, add additional args for stability
     puppeteerConfig.args = puppeteerConfig.args.concat([
-      '--disable-dev-shm-usage',
-      '--disable-gpu',
       '--single-process'
     ]);
   }
@@ -7615,207 +7855,83 @@ function startWhatsAppClient(profileName, event = null) {
   });
 
   client.on("ready", async () => {
-    //console.log(`✅ ${profileName} logged in`);
-    
-    // COMPREHENSIVE anti-detection: Setup browser automation concealment
     try {
-      // CRITICAL: Inject advanced stealth scripts to completely hide automation
+      console.log(`🔐 ${profileName} session loaded`);
+
+      // --- 1️⃣ MINIMAL + SAFE STEALTH ---
       await client.pupPage.evaluateOnNewDocument(() => {
-        // 1. REMOVE ALL AUTOMATION SIGNATURES
-        delete navigator.__proto__.webdriver;
-        delete window.chrome.runtime.onConnect;
-        delete window.chrome.runtime.onMessage;
         
-        // 2. OVERRIDE AUTOMATION DETECTION PROPERTIES
-        Object.defineProperty(navigator, 'webdriver', {
+        // Remove webdriver flag
+        Object.defineProperty(navigator, "webdriver", {
           get: () => false,
-          configurable: true
         });
-        
-        // 3. MASK AUTOMATION FLAGS
-        Object.defineProperty(window, 'chrome', {
-          get: () => ({
-            runtime: {},
-            loadTimes: function() {},
-            csi: function() {},
-            app: {}
-          }),
-          configurable: true
-        });
-        
-        // 4. SIMULATE REAL BROWSER PLUGINS
-        Object.defineProperty(navigator, 'plugins', {
+
+        // Fake chrome object (WhatsApp checks this!)
+        window.chrome = {
+          runtime: {},
+        };
+
+        // Realistic plugin list (but small)
+        Object.defineProperty(navigator, "plugins", {
           get: () => [
             {
-              0: {type: "application/x-google-chrome-pdf", suffixes: "pdf", description: "Portable Document Format"},
-              description: "Portable Document Format",
+              name: "Chrome PDF Plugin",
               filename: "internal-pdf-viewer",
-              length: 1,
-              name: "Chrome PDF Plugin"
-            },
-            {
-              0: {type: "application/pdf", suffixes: "pdf", description: ""},
-              description: "",
-              filename: "mhjfbmdgcfjbbpaeojofohoefgiehjai",
-              length: 1,
-              name: "Chrome PDF Viewer"
+              description: "Portable Document Format",
             }
           ],
-          configurable: true
         });
-        
-        // 5. REALISTIC LANGUAGE PREFERENCES
-        Object.defineProperty(navigator, 'languages', {
-          get: () => ['en-US', 'en', 'es'],
-          configurable: true
+
+        // Languages
+        Object.defineProperty(navigator, "languages", {
+          get: () => ["en-US", "en-IN", "en"],
         });
-        
-        // 6. OVERRIDE PERMISSIONS API
-        const originalQuery = window.navigator.permissions.query;
-        window.navigator.permissions.query = (parameters) => (
-          parameters.name === 'notifications' ?
-            Promise.resolve({ state: 'granted' }) :
-            originalQuery(parameters)
-        );
-        
-        // 7. ADVANCED CANVAS FINGERPRINTING PROTECTION
-        const getContext = HTMLCanvasElement.prototype.getContext;
-        HTMLCanvasElement.prototype.getContext = function(type) {
-          if (type === '2d') {
-            const context = getContext.call(this, type);
-            const originalFillText = context.fillText;
-            const originalStrokeText = context.strokeText;
-            
-            // Add slight noise to text rendering
-            context.fillText = function() {
-              const noise = (Math.random() - 0.5) * 0.0001;
-              arguments[1] += noise;
-              arguments[2] += noise;
-              return originalFillText.apply(this, arguments);
-            };
-            
-            context.strokeText = function() {
-              const noise = (Math.random() - 0.5) * 0.0001;  
-              arguments[1] += noise;
-              arguments[2] += noise;
-              return originalStrokeText.apply(this, arguments);
-            };
-            
-            return context;
-          }
-          return getContext.call(this, type);
-        };
-        
-        // 8. WEBGL FINGERPRINTING PROTECTION  
-        const getParameter = WebGLRenderingContext.prototype.getParameter;
-        WebGLRenderingContext.prototype.getParameter = function(parameter) {
-          // Randomize GPU renderer strings
-          if (parameter === 37445) {
-            return 'Intel Inc.';
-          }
-          if (parameter === 37446) {
-            return 'Intel(R) HD Graphics 620';  
-          }
-          return getParameter.call(this, parameter);
-        };
-        
-        // 9. AUDIO CONTEXT FINGERPRINTING PROTECTION
-        const originalGetChannelData = AudioBuffer.prototype.getChannelData;
-        AudioBuffer.prototype.getChannelData = function() {
-          const originalData = originalGetChannelData.apply(this, arguments);
-          // Add minimal noise to audio fingerprinting
-          for (let i = 0; i < originalData.length; i += 100) {
-            originalData[i] = originalData[i] + (Math.random() - 0.5) * 0.00001;
-          }
-          return originalData;
-        };
-        
-        // 10. SCREEN RESOLUTION RANDOMIZATION
-        Object.defineProperty(screen, 'width', {
-          get: () => 1920 + Math.floor(Math.random() * 100) - 50
-        });
-        Object.defineProperty(screen, 'height', {
-          get: () => 1080 + Math.floor(Math.random() * 100) - 50
-        });
-        
-        // 11. TIMEZONE NORMALIZATION
-        Date.prototype.getTimezoneOffset = function() {
-          return -330; // IST timezone offset
-        };
-        
-        // 12. MEMORY INFO SPOOFING
-        Object.defineProperty(navigator, 'deviceMemory', {
-          get: () => 8,
-          configurable: true
-        });
-        
-        // 13. CONNECTION INFO SPOOFING
-        Object.defineProperty(navigator, 'connection', {
-          get: () => ({
-            effectiveType: '4g',
-            downlink: 10,
-            rtt: 50
-          }),
-          configurable: true
-        });
-        
-        console.log('[STEALTH] Advanced anti-detection measures activated');
       });
-      
-      // Set randomized user agent
-      await client.pupPage.setUserAgent(selectedUserAgent);
-      
-      // Set realistic viewport with slight randomization
+
+      // --- 2️⃣ REALISTIC USER AGENT ---
+      await client.pupPage.setUserAgent(
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+        "(KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+      );
+
+      // --- 3️⃣ REALISTIC VIEWPORT ---
       await client.pupPage.setViewport({
-        width: 1366 + Math.floor(Math.random() * 200) - 100,
-        height: 768 + Math.floor(Math.random() * 200) - 100,
+        width: 1280 + Math.floor(Math.random() * 50),
+        height: 720 + Math.floor(Math.random() * 50),
         deviceScaleFactor: 1,
-        isMobile: false,
-        hasTouch: false
       });
-      
-      // Set realistic geolocation (optional)
-      await client.pupPage.setGeolocation({
-        latitude: 28.6139 + (Math.random() - 0.5) * 0.1, // Delhi area with variance
-        longitude: 77.2090 + (Math.random() - 0.5) * 0.1,
-        accuracy: 100
+
+      // --- 4️⃣ ADD LIGHT HISTORY (not fake, just a flag) ---
+      await client.pupPage.evaluate(() => {
+        localStorage.setItem("wh_last_session", Date.now());
       });
+
+      // --- 5️⃣ NETWORK SMOOTHING ---
+      try {
+        await client.pupPage.setCacheEnabled(true);
+      } catch {}
+
+      // --- 6️⃣ STABILIZE WHATSAPP BOOT ---
+      await new Promise(resolve => setTimeout(resolve, 1500 + Math.random() * 1500));
+
+
+      console.log(`🟢 ${profileName} ready with SAFE stealth`);
       
-      // Add realistic browser history and session storage
-      await client.pupPage.evaluateOnNewDocument(() => {
-        // Simulate browser history
-        localStorage.setItem('lastVisit', Date.now() - Math.floor(Math.random() * 86400000));
-        
-        // Add some realistic session storage
-        sessionStorage.setItem('sessionId', Math.random().toString(36).substr(2, 9));
-        sessionStorage.setItem('startTime', Date.now());
-      });
-      
-      // Apply additional stealth countermeasures
-      await addStealthCountermeasures(client.pupPage);
-      
-      // Setup network traffic masking
-      await setupNetworkMasking(client.pupPage);
-      
-      // Simulate browser extensions for realism
-      await simulateBrowserExtensions(client.pupPage);
-      
-      //console.log(`[${profileName}] ✅ MAXIMUM STEALTH MODE ACTIVATED`);
-      
-    } catch (error) {
-      console.log(`[${profileName}] Stealth setup warning:`, error.message);
+      activeClients[profileName] = client;
+
+      // Save session directory
+      const authBasePath = path.join(getUserDataDir(), '.wwebjs_auth');
+      const sessionFolder = path.join(authBasePath, `session-${profileName}`);
+      addOrUpdateProfile(profileName, sessionFolder, client.info);
+
+      if (event) event.sender.send("profile-added", profileName);
+      if (mainWin) mainWin.webContents.send("refresh-profiles");
+
+    } catch (err) {
+      console.log(`⚠️ Stealth error for ${profileName}:`, err.message);
     }
-    
-    activeClients[profileName] = client; // cache client
-
-  // Store the actual session directory under userData
-  const authBasePath = path.join(getUserDataDir(), '.wwebjs_auth');
-  const sessionFolder = path.join(authBasePath, `session-${profileName}`);
-  addOrUpdateProfile(profileName, sessionFolder, client.info);
-
-    if (event) event.sender.send("profile-added", profileName);
-    if (mainWin) mainWin.webContents.send("refresh-profiles");
   });
+
 
   client.on("disconnected", reason => {
     console.log(`⚠️ ${profileName} disconnected: ${reason}`);
@@ -7867,8 +7983,6 @@ function formatNumber(num) {
 }
   
 // Verify and format a phone number for sending. Returns an object:
-// { valid: boolean, jid: string|null, reason: string|null, isWhatsApp: boolean|null }
-// - reason: 'missing' | 'too_short' | 'invalid_eleven_91' | 'not_whatsapp' | 'format_error' | 'check_failed' | null
 async function verifyAndFormatPhone(client, rawPhone) {
   const out = { valid: false, jid: null, reason: null, isWhatsApp: null };
   try {
@@ -7882,9 +7996,7 @@ async function verifyAndFormatPhone(client, rawPhone) {
       out.reason = 'too_short';
       return out;
     }
-
     // Reject 11-digit numbers that start with '91' as invalid per user rule
-    // (explicit policy: if number is 11 digits and starts with 91, mark as not valid)
     if (digits.length === 11 && digits.startsWith('91')) {
       out.reason = 'invalid_eleven_91';
       return out;
@@ -7955,14 +8067,14 @@ function getTemplateData(templateName) {
   };
 }
 
-function splitIntoChunks(array, numChunks) {
-  const chunkSize = Math.ceil(array.length / numChunks);
-  const chunks = [];
-  for (let i = 0; i < numChunks; i++) {
-    chunks.push(array.slice(i * chunkSize, (i + 1) * chunkSize));
-  }
-  return chunks;
-}
+// function splitIntoChunks(array, numChunks) {
+//   const chunkSize = Math.ceil(array.length / numChunks);
+//   const chunks = [];
+//   for (let i = 0; i < numChunks; i++) {
+//     chunks.push(array.slice(i * chunkSize, (i + 1) * chunkSize));
+//   }
+//   return chunks;
+// }
 
 function readJsonLog(filePath) {
   const fp = filePath || getJsonLogsPath();
@@ -7994,9 +8106,9 @@ function updateJobInLog(filePath, jobId, updates) {
   writeJsonLog(fp, logs);
 }
 
-function setImmediatePromise() {
-  return new Promise(resolve => setImmediate(resolve));
-}
+// function setImmediatePromise() {
+//   return new Promise(resolve => setImmediate(resolve));
+// }
 
 const supportedFormats = [
   "YYYY-MM-DD",
@@ -8037,53 +8149,53 @@ function parseDate(input) {
 }
 
 // New function specifically for parsing datetime fields (like last message sent date)
-function parseDateTime(input) {
-  // Handle null, undefined, empty string, or whitespace-only strings
-  if (!input || String(input).trim() === '') return null;
+// function parseDateTime(input) {
+//   // Handle null, undefined, empty string, or whitespace-only strings
+//   if (!input || String(input).trim() === '') return null;
 
-  // ✅ Excel serial number (e.g. 45920) - convert to datetime with default time
-  if (typeof input === "number") {
-    const excelEpoch = new Date(Date.UTC(1899, 11, 30));
-    const date = new Date(excelEpoch.getTime() + input * 86400000);
-    // If it's a date-only value, add default time (12:00:00)
-    return dayjs(date).toISOString();
-  }
+//   // ✅ Excel serial number (e.g. 45920) - convert to datetime with default time
+//   if (typeof input === "number") {
+//     const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+//     const date = new Date(excelEpoch.getTime() + input * 86400000);
+//     // If it's a date-only value, add default time (12:00:00)
+//     return dayjs(date).toISOString();
+//   }
 
-  // ✅ Native JS Date
-  if (input instanceof Date && !isNaN(input)) {
-    const parsed = dayjs(input);
-    // Check if time is exactly midnight (00:00:00) - likely date-only input
-    if (parsed.hour() === 0 && parsed.minute() === 0 && parsed.second() === 0) {
-      // Add default time (12:00:00) for date-only inputs
-      return parsed.hour(12).toISOString();
-    }
-    return parsed.toISOString();
-  }
+//   // ✅ Native JS Date
+//   if (input instanceof Date && !isNaN(input)) {
+//     const parsed = dayjs(input);
+//     // Check if time is exactly midnight (00:00:00) - likely date-only input
+//     if (parsed.hour() === 0 && parsed.minute() === 0 && parsed.second() === 0) {
+//       // Add default time (12:00:00) for date-only inputs
+//       return parsed.hour(12).toISOString();
+//     }
+//     return parsed.toISOString();
+//   }
 
-  // ✅ String with custom formats
-  if (typeof input === "string") {
-    const trimmed = input.trim();
-    if (trimmed === '') return null; // Handle empty trimmed strings
+//   // ✅ String with custom formats
+//   if (typeof input === "string") {
+//     const trimmed = input.trim();
+//     if (trimmed === '') return null; // Handle empty trimmed strings
     
-    const parsed = dayjs(trimmed, supportedFormats, true);
-    if (parsed.isValid()) {
-      // Check if the input string contains time information
-      const hasTime = /\d{1,2}:\d{2}/.test(trimmed) || trimmed.includes('AM') || trimmed.includes('PM');
+//     const parsed = dayjs(trimmed, supportedFormats, true);
+//     if (parsed.isValid()) {
+//       // Check if the input string contains time information
+//       const hasTime = /\d{1,2}:\d{2}/.test(trimmed) || trimmed.includes('AM') || trimmed.includes('PM');
       
-      if (!hasTime) {
-        // Date-only string - add default time (12:00:00)
-        return parsed.hour(12).minute(0).second(0).toISOString();
-      } else {
-        // Already has time - preserve it
-        return parsed.toISOString();
-      }
-    }
-    return null;
-  }
+//       if (!hasTime) {
+//         // Date-only string - add default time (12:00:00)
+//         return parsed.hour(12).minute(0).second(0).toISOString();
+//       } else {
+//         // Already has time - preserve it
+//         return parsed.toISOString();
+//       }
+//     }
+//     return null;
+//   }
 
-  // ❌ Fallback
-  return null;
-}
+//   // ❌ Fallback
+//   return null;
+// }
 
 ipcMain.on("force-exit", (event, jobIds) => {
   jobIds.forEach((jobId) => {
@@ -8102,7 +8214,6 @@ ipcMain.on("force-exit", (event, jobIds) => {
 ipcMain.on("normal-exit", () => {
   app.exit(0);
 });
-
 
 const updateDndByPhone = db.prepare(`
   UPDATE patients
@@ -8176,7 +8287,6 @@ async function getDiskSerial() {
 ipcMain.on("login-request", async (event, credentials) => {
   try {
     const serial = await getDiskSerial();
-    // console.log("Disk Serial:", serial);
     const response = await axios.post("https://ticket.digitalsolutions.co.in/WinApplogin", {
       Email: credentials.username,
       Password: credentials.password,
@@ -8184,10 +8294,6 @@ ipcMain.on("login-request", async (event, credentials) => {
     });
     //console.log(response);
     const result = response.data;
-    // console.log(result);
-    //return
-   // const status = response.data?.status || "failed";
-
     // If API returned user details, persist them for later use
     try {
       const ud = result && (result.UserDetails || result.userDetails || null);
@@ -8308,8 +8414,6 @@ ipcMain.handle('get-license-info', () => {
   }
 });
 
-
-
 // Copy samples folder to userData directory on startup
 // function copySamplesToUserData() {
 //   try {
@@ -8400,14 +8504,9 @@ function copySamplesToUserData() {
       // For development mode
       samplesSourcePath = path.join(__dirname, 'samples');
     }
-
-    console.log('📁 Looking for samples folder...');
-    console.log('   Expected source:', samplesSourcePath);
-
     // Validate source folder exists
     if (!fs.existsSync(samplesSourcePath)) {
       console.error('❌ Samples folder NOT FOUND at:', samplesSourcePath);
-
       // Fallback for development
       const altPath = path.join(__dirname, '..', 'samples');
       if (fs.existsSync(altPath)) {
@@ -8418,35 +8517,26 @@ function copySamplesToUserData() {
         return;
       }
     }
-
     // Ensure destination exists
     fs.mkdirSync(samplesDestPath, { recursive: true });
-
     // Get files (skip directories)
     const entries = fs.readdirSync(samplesSourcePath, { withFileTypes: true });
-
     const files = entries.filter(e => e.isFile()).map(e => e.name);
-
-    console.log(`📦 Found ${files.length} sample file(s). Copying...`);
-
+    //console.log(`📦 Found ${files.length} sample file(s). Copying...`);
     let copiedCount = 0;
-
     for (const file of files) {
       const source = path.join(samplesSourcePath, file);
       const dest = path.join(samplesDestPath, file);
-
       try {
         let shouldCopy = true;
-
         if (fs.existsSync(dest)) {
           const srcStat = fs.statSync(source);
           const dstStat = fs.statSync(dest);
           shouldCopy = srcStat.mtime > dstStat.mtime;
         }
-
         if (shouldCopy) {
           fs.copyFileSync(source, dest);
-          console.log(`   ✔ Copied: ${file}`);
+         // console.log(`   ✔ Copied: ${file}`);
           copiedCount++;
         } else {
           console.log(`   ↪ Skipped (up to date): ${file}`);
@@ -8455,22 +8545,15 @@ function copySamplesToUserData() {
         console.error(`   ❌ Failed: ${file} → ${err.message}`);
       }
     }
-
-    console.log(`🎉 Samples copy completed → ${copiedCount}/${files.length} files copied`);
-
+   // console.log(`🎉 Samples copy completed → ${copiedCount}/${files.length} files copied`);
   } catch (err) {
     console.error('🔥 Fatal error copying samples:', err.message);
   }
 }
 
-
 app.whenReady().then(() => {
     // Copy samples folder to userData directory first
     copySamplesToUserData();
-    
-    // Ensure default settings exist (non-destructive). If user hasn't set a custom
-    // findChatRetryDelayMs, persist a sensible default so retry timing can be adjusted
-    // from settings later without changing code.
     try {
       const current = (typeof loadSettings === 'function') ? loadSettings() : {};
       if (!current || typeof current.findChatRetryDelayMs === 'undefined' || current.findChatRetryDelayMs === null) {
@@ -8487,17 +8570,8 @@ app.whenReady().then(() => {
     } catch (e) {
       console.warn('Error while ensuring default settings:', e && e.message ? e.message : e);
     }
-
     //createMainWindow();
     createLoginWindow();
-    // 🔄 Auto-load saved profiles on startup
-    // const profiles = loadProfiles();
-    // profiles.forEach(p => {
-    //     if (p.is_active) {
-    //         console.log(`Reconnecting profile: ${p.name}`);
-    //         startWhatsAppClient(p.name);
-    //     }
-    // });
 });
 
 // Auto-updater setup (GitHub releases via electron-updater)
@@ -8597,6 +8671,31 @@ if (autoUpdater) {
 // ADVANCED MONITORING & SAFETY SYSTEMS
 // =============================================================================
 
+// Safety status reporting
+function logSafetyStatus() {
+  
+  for (const [profileName, health] of sessionHealth) {
+    const cooldownEnd = profileCooldowns.get(profileName);
+    const inCooldown = cooldownEnd && Date.now() < cooldownEnd;
+    
+    let status = '🟢 SAFE';
+    if (health.consecutiveFailures >= 5 || health.rateLimitHits >= 3 || inCooldown) {
+      status = '🔴 RISK';
+    } else if (health.consecutiveFailures >= 3 || health.rateLimitHits >= 1) {
+      status = '🟡 CAUTION';
+    }
+    
+    console.log(`[${profileName}] ${status}`);
+    console.log(`  Messages: ${health.messagesSent}, Failures: ${health.consecutiveFailures}, Rate hits: ${health.rateLimitHits}`);
+    
+    if (inCooldown) {
+      const remaining = Math.ceil((cooldownEnd - Date.now()) / 60000);
+      
+    }
+  }
+  
+}
+
 // Auto-log safety status every 10 minutes during active operations
 setInterval(() => {
   if (sessionHealth.size > 0) {
@@ -8651,10 +8750,6 @@ setInterval(() => {
     emergencyBrakeCheck();
   }
 }, 2 * 60 * 1000);
-
-//console.log('🛡️ WhatsApp Multi with MAXIMUM STEALTH MODE - Ready!');
-//console.log('✅ All anti-detection measures activated');
-//console.log('✅ Advanced monitoring systems online');
 
 // Send messages to profile patients using template sequence logic with full safety features
 ipcMain.on('send-profile-messages-with-sequence', async (event, data) => {
@@ -9205,14 +9300,13 @@ ipcMain.on('send-profile-messages-with-sequence', async (event, data) => {
         if (profileSentWindow[currentProfile].length >= perProfileLimitPerMinute) {
           console.warn(`⏳ PROFILE RATE LIMIT: Profile ${currentProfile} rate limit reached (${profileSentWindow[currentProfile].length}/${perProfileLimitPerMinute}/min), waiting 15 seconds...`);
           
-          // Wait 15 seconds for some messages to age out of the rate limit window
-          await new Promise(resolve => setTimeout(resolve, 40000));
-          
+          // Wait random delay between 60–90 seconds for some messages to age out of the rate limit window
+          const delay = 60000 + Math.floor(Math.random() * 30000);
+          await new Promise(resolve => setTimeout(resolve, delay));
           // Re-check the rate limit after waiting
           const newTime = Date.now();
           profileSentWindow[currentProfile] = profileSentWindow[currentProfile].filter(time => newTime - time < 60000);
-          console.log(`✅ Profile rate limit recheck. Current: ${profileSentWindow[currentProfile].length}/${perProfileLimitPerMinute}/min`);
-          
+          //console.log(`✅ Profile rate limit recheck. Current: ${profileSentWindow[currentProfile].length}/${perProfileLimitPerMinute}/min`);
           // DO NOT continue - process the same patient after waiting
         }
         console.log(`✅ Rate limit checks passed: Global ${globalSentWindow.length}/${rateLimitPerMinute}/min, Profile ${profileSentWindow[currentProfile].length}/${perProfileLimitPerMinute}/min`);
@@ -10209,31 +10303,18 @@ ipcMain.handle('save-template-with-media', async (event, templateData) => {
     
     // Prepare template data
     const dbData = {
-      name: templateData.name,
-      type: templateData.type || 'Text',
-      message: templateData.message || '',
-      media_path: templateData.media_path || null,
-      media_filename: templateData.media_filename || null,
-      sendOption: templateData.sendOption || 'instant',
-      afterDays: templateData.afterDays || 0,
-      is_active: 1,
-      is_delete: 0,
-      created: timestamp,
+      name: templateData.name, type: templateData.type || 'Text',
+      message: templateData.message || '',      media_path: templateData.media_path || null,
+      media_filename: templateData.media_filename || null,      sendOption: templateData.sendOption || 'instant',
+      afterDays: templateData.afterDays || 0,      is_active: 1,
+      is_delete: 0,      created: timestamp,
       modified: timestamp
     };
-    
-    console.log('Database data being saved:', dbData);
-    
+    //console.log('Database data being saved:', dbData);
     // Save to database
     upsertTemplate.run(dbData);
-    
-    console.log(`Template saved: ${templateData.name} (Type: ${templateData.type})`);
-    
-    return {
-      success: true,
-      message: 'Template saved successfully'
-    };
-    
+    //console.log(`Template saved: ${templateData.name} (Type: ${templateData.type})`);
+    return {      success: true,      message: 'Template saved successfully'    };
   } catch (error) {
     console.error('Template save error:', error);
     return {

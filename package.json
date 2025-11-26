@@ -1,8 +1,8 @@
 {
   "name": "whasend",
   "version": "1.9.2",
-  "releaseDate": "2025-11-20",
-  "description": "whasend device desktop app with updated features like export patient, better message send today",
+  "releaseDate": "2025-11-26",
+  "description": "whasend desktop app with scheduled send",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
