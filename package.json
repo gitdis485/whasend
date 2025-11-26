@@ -1,6 +1,6 @@
 {
   "name": "whasend",
-  "version": "1.9.2",
+  "version": "1.9.3",
   "releaseDate": "2025-11-26",
   "description": "whasend desktop app with scheduled send",
   "main": "main.js",
